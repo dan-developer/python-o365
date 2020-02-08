@@ -1511,6 +1511,9 @@ class Calendar(ApiComponent, HandleRecipientsMixin):
 
         cloud_data = kwargs.get(self._cloud_data_key, {})
 
+        self.owner_name = cloud_data['owner']['name']
+        self.owner_address = cloud_data['owner']['address']
+
         self.name = cloud_data.get(self._cc('name'), '')
         self.calendar_id = cloud_data.get(self._cc('id'), None)
         self.__owner = self._recipient_from_cloud(
@@ -1837,6 +1840,48 @@ class Schedule(ApiComponent):
 
     def get_calendar(self, calendar_id=None, calendar_name=None):
         """ Returns a calendar by it's id or name
+
+        :param str calendar_id: the calendar id to be retrieved.
+        :param str calendar_name: the calendar name to be retrieved.
+        :return: calendar for the given info
+        :rtype: Calendar
+        """
+        if calendar_id and calendar_name:
+            raise RuntimeError('Provide only one of the options')
+
+        if not calendar_id and not calendar_name:
+            raise RuntimeError('Provide one of the options')
+
+        if calendar_id:
+            # get calendar by it's id
+            url = self.build_url(
+                self._endpoints.get('get_calendar').format(id=calendar_id))
+            params = None
+        else:
+            # get calendar by name
+            url = self.build_url(self._endpoints.get('root_calendars'))
+            params = {
+                '$filter': "{} eq '{}'".format(self._cc('name'), calendar_name),
+                '$top': 1}
+
+        response = self.con.get(url, params=params)
+        if not response:
+            return None
+
+        if calendar_id:
+            data = response.json()
+        else:
+            data = response.json().get('value')
+            data = data[0] if data else None
+            if data is None:
+                return None
+
+        # Everything received from cloud must be passed as self._cloud_data_key
+        return self.calendar_constructor(parent=self,
+                                         **{self._cloud_data_key: data})
+
+    def get_all_calendars(self, calendar_id=None, calendar_name=None):
+        """ Returns all calendar
 
         :param str calendar_id: the calendar id to be retrieved.
         :param str calendar_name: the calendar name to be retrieved.
